@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Northern Michigan Winery Map</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Lato:wght@300;400;600&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --green:    #2c5f2e;
+      --green-lt: #4a8c4d;
+      --burg:     #7a2735;
+      --burg-lt:  #a63d4d;
+      --navy:     #1e3a5f;
+      --navy-lt:  #2d5490;
+      --cream:    #f7f3ec;
+      --warm:     #ede6d8;
+      --gold:     #c4922a;
+      --dark:     #1a1a1a;
+      --mid:      #4a4a4a;
+      --light:    #8a8a8a;
+      --white:    #ffffff;
+      --border:   #ddd4c4;
+    }
+
+    html, body {
+      height: 100%;
+      font-family: 'Lato', sans-serif;
+      background: var(--cream);
+      color: var(--dark);
+      overflow: hidden;
+    }
+
+    /* ── LAYOUT ── */
+    .app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+
+    /* ── FILTER BAR ── */
+    .filters {
+      background: var(--green);
+      padding: 10px 14px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .filters-label {
+      color: rgba(255,255,255,0.65);
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-right: 2px;
+    }
+    .filter-btn {
+      padding: 5px 13px;
+      border-radius: 20px;
+      border: 1.5px solid rgba(255,255,255,0.35);
+      background: transparent;
+      color: rgba(255,255,255,0.85);
+      font-family: 'Lato', sans-serif;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.18s;
+      white-space: nowrap;
+    }
+    .filter-btn:hover { border-color: white; color: white; }
+    .filter-btn.active { color: var(--dark); border-color: transparent; }
+    .filter-btn[data-region="all"].active           { background: white; }
+    .filter-btn[data-region="Old Mission Peninsula"].active { background: #7fcf82; color: #1a3a1a; }
+    .filter-btn[data-region="Leelanau Peninsula"].active    { background: #e8909a; color: #3a0a12; }
+    .filter-btn[data-region="Tip of the Mitt"].active       { background: #7aaee8; color: #0a1a3a; }
+
+    /* ── MAIN ── */
+    .main { display: flex; flex: 1; overflow: hidden; }
+
+    /* ── SIDEBAR ── */
+    .sidebar {
+      width: 320px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      background: var(--white);
+      border-right: 1px solid var(--border);
+      overflow: hidden;
+    }
+    .sidebar-header {
+      padding: 10px 14px 8px;
+      border-bottom: 1px solid var(--border);
+      background: var(--cream);
+    }
+    .sidebar-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--green);
+      line-height: 1.2;
+    }
+    .sidebar-count {
+      font-size: 0.72rem;
+      color: var(--light);
+      margin-top: 2px;
+    }
+    .winery-list { overflow-y: auto; flex: 1; }
+
+    /* ── CARDS ── */
+    .card {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.15s;
+      border-left: 3px solid transparent;
+    }
+    .card:hover { background: var(--cream); }
+    .card.active { background: #f0f7f0; }
+    .card.active[data-region="Old Mission Peninsula"] { border-left-color: var(--green);  background: #eef6ee; }
+    .card.active[data-region="Leelanau Peninsula"]    { border-left-color: var(--burg);   background: #f9eef0; }
+    .card.active[data-region="Tip of the Mitt"]       { border-left-color: var(--navy);   background: #edf1f8; }
+    .card.hidden { display: none; }
+
+    .card-name {
+      font-family: 'Playfair Display', serif;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--dark);
+      margin-bottom: 5px;
+      line-height: 1.3;
+    }
+    .card-badge {
+      display: inline-block;
+      font-size: 0.64rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      padding: 2px 7px;
+      border-radius: 10px;
+      color: white;
+      margin-bottom: 5px;
+    }
+    .badge-om  { background: var(--green); }
+    .badge-lee { background: var(--burg); }
+    .badge-tip { background: var(--navy); }
+
+    .card-address {
+      font-size: 0.74rem;
+      color: var(--light);
+      line-height: 1.4;
+    }
+    .card-directions {
+      display: inline-block;
+      margin-top: 5px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: var(--gold);
+      text-decoration: none;
+    }
+    .card-directions:hover { text-decoration: underline; }
+
+    /* ── MAP ── */
+    #map { flex: 1; z-index: 1; }
+
+    /* ── POPUP ── */
+    .leaflet-popup-content-wrapper {
+      border-radius: 10px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.18);
+      padding: 0;
+      overflow: hidden;
+    }
+    .leaflet-popup-content { margin: 0; }
+    .popup-inner { padding: 13px 16px; min-width: 200px; }
+    .popup-region-bar { height: 4px; }
+    .popup-bar-om  { background: var(--green); }
+    .popup-bar-lee { background: var(--burg); }
+    .popup-bar-tip { background: var(--navy); }
+    .popup-name {
+      font-family: 'Playfair Display', serif;
+      font-size: 0.98rem;
+      font-weight: 700;
+      margin-bottom: 3px;
+      line-height: 1.3;
+    }
+    .popup-region-label {
+      font-size: 0.68rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--light);
+      margin-bottom: 7px;
+    }
+    .popup-address { font-size: 0.78rem; color: var(--mid); line-height: 1.5; margin-bottom: 8px; }
+    .popup-directions {
+      display: inline-block;
+      font-size: 0.73rem;
+      font-weight: 700;
+      color: var(--gold);
+      text-decoration: none;
+    }
+    .popup-directions:hover { text-decoration: underline; }
+    .leaflet-popup-tip { background: white; }
+
+    /* ── MOBILE ── */
+    @media (max-width: 700px) {
+      .main { flex-direction: column; }
+      .sidebar {
+        width: 100%;
+        height: 42%;
+        border-right: none;
+        border-top: 1px solid var(--border);
+        order: 2;
+      }
+      #map { order: 1; height: 58%; }
+      .filters { padding: 8px 10px; gap: 6px; }
+      .filter-btn { font-size: 0.7rem; padding: 4px 10px; }
+      .filters-label { display: none; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- FILTER BAR -->
+  <div class="filters">
+    <span class="filters-label">Region:</span>
+    <button class="filter-btn active" data-region="all">All Wineries</button>
+    <button class="filter-btn" data-region="Old Mission Peninsula">Old Mission</button>
+    <button class="filter-btn" data-region="Leelanau Peninsula">Leelanau</button>
+    <button class="filter-btn" data-region="Tip of the Mitt">Tip of the Mitt</button>
+  </div>
+
+  <div class="main">
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-title">Northern Michigan Wineries</div>
+        <div class="sidebar-count" id="count">Showing all 44 wineries</div>
+      </div>
+      <div class="winery-list" id="winery-list"></div>
+    </div>
+
+    <!-- MAP -->
+    <div id="map"></div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ── WINERY DATA ──────────────────────────────────────────────────
+const wineries = [
+  // OLD MISSION PENINSULA
+  { name:"Chateau Chantal",                   address:"15900 Rue De Vin, Traverse City, MI",        region:"Old Mission Peninsula", lat:44.919641, lng:-85.502022 },
+  { name:"Chateau Grand Traverse",            address:"12239 Center Rd, Traverse City, MI",          region:"Old Mission Peninsula", lat:44.864935, lng:-85.522422 },
+  { name:"Bonobo Winery",                     address:"12011 Center Rd, Traverse City, MI",          region:"Old Mission Peninsula", lat:44.860421, lng:-85.523369 },
+  { name:"Peninsula Cellars",                 address:"11480 Center Rd, Traverse City, MI",          region:"Old Mission Peninsula", lat:44.854196, lng:-85.527370 },
+  { name:"Bowers Harbor Vineyards",           address:"2896 Bowers Harbor Rd, Traverse City, MI",   region:"Old Mission Peninsula", lat:44.904300, lng:-85.521200 },
+  { name:"2 Lads Winery",                     address:"16985 Smokey Hollow Rd, Traverse City, MI",  region:"Old Mission Peninsula", lat:44.934340, lng:-85.496001 },
+  { name:"Brys Estate Vineyard & Winery",     address:"3309 Blue Water Rd, Traverse City, MI",      region:"Old Mission Peninsula", lat:44.886667, lng:-85.512297 },
+  { name:"Tabone Vineyards",                  address:"14916 Peninsula Dr, Traverse City, MI",      region:"Old Mission Peninsula", lat:44.904691, lng:-85.517848 },
+  { name:"Hawthorne Vineyards",               address:"1000 Camino Maria Dr, Traverse City, MI",    region:"Old Mission Peninsula", lat:44.826355, lng:-85.563636 },
+  { name:"Mari Vineyards",                    address:"8175 Center Rd, Traverse City, MI",          region:"Old Mission Peninsula", lat:44.808540, lng:-85.570456 },
+  { name:"Black Star Farms Old Mission",      address:"360 McKinley Rd E, Traverse City, MI",       region:"Old Mission Peninsula", lat:44.796401, lng:-85.708381 },
+
+  // LEELANAU PENINSULA
+  { name:"Shady Lane Cellars",                address:"9580 E Shady Ln, Suttons Bay, MI",           region:"Leelanau Peninsula",    lat:45.020000, lng:-85.606000 },
+  { name:"Aurora Cellars",                    address:"7788 E Horn Rd, Lake Leelanau, MI",          region:"Leelanau Peninsula",    lat:44.980100, lng:-85.733500 },
+  { name:"MAWBY Vineyards",                   address:"4519 Elm Valley Rd, Suttons Bay, MI",        region:"Leelanau Peninsula",    lat:44.973500, lng:-85.713000 },
+  { name:"Big Little Wines (MAWBY Sparkling)",address:"4519 Elm Valley Rd, Suttons Bay, MI",        region:"Leelanau Peninsula",    lat:44.913748, lng:-85.654876 },
+  { name:"Green Bird Cellars",                address:"9825 E Engles Rd, Northport, MI",            region:"Leelanau Peninsula",    lat:45.132000, lng:-85.610000 },
+  { name:"Bel Lago Winery",                   address:"6530 S Lake Shore Dr, Cedar, MI",            region:"Leelanau Peninsula",    lat:44.846500, lng:-85.842500 },
+  { name:"Laurentide Winery",                 address:"12700 E Tatch Rd, Lake Leelanau, MI",        region:"Leelanau Peninsula",    lat:44.977000, lng:-85.745000 },
+  { name:"Chateau Fontaine",                  address:"10244 E Front St, Lake Leelanau, MI",        region:"Leelanau Peninsula",    lat:44.981500, lng:-85.717500 },
+  { name:"Brengman Brothers Winery",          address:"9720 S Center Hwy, Traverse City, MI",       region:"Leelanau Peninsula",    lat:44.826500, lng:-85.687000 },
+  { name:"Rove Estate Vineyard & Winery",     address:"7007 E Traverse Hwy, Traverse City, MI",    region:"Leelanau Peninsula",    lat:44.800500, lng:-85.680200 },
+  { name:"French Valley Vineyard",            address:"3655 S French Rd, Cedar, MI",                region:"Leelanau Peninsula",    lat:44.796500, lng:-85.789000 },
+  { name:"45 North Vineyard & Winery",        address:"8580 E Horn Rd, Lake Leelanau, MI",          region:"Leelanau Peninsula",    lat:45.000647, lng:-85.686069 },
+  { name:"Verterra Winery",                   address:"103 S Waukazoo St, Northport, MI",           region:"Leelanau Peninsula",    lat:45.022949, lng:-85.764453 },
+  { name:"The Ridge at Verterra",             address:"8080 N Swede Rd, Northport, MI",             region:"Leelanau Peninsula",    lat:45.099292, lng:-85.643762 },
+  { name:"Black Star Farms",                  address:"10844 E Revold Rd, Suttons Bay, MI",         region:"Leelanau Peninsula",    lat:44.9337851, lng:-85.6361931 },
+  { name:"Good Harbor Vineyards",             address:"34 S Manitou Trail, Lake Leelanau, MI",      region:"Leelanau Peninsula",    lat:44.983009, lng:-85.776477 },
+  { name:"Blustone Vineyards",                address:"780 N Sylt Rd, Lake Leelanau, MI",           region:"Leelanau Peninsula",    lat:44.993762, lng:-85.694990 },
+
+  // TIP OF THE MITT
+  { name:"Rudbeckia Winery",                  address:"3379 Lake Grove Rd, Petoskey, MI",           region:"Tip of the Mitt",       lat:45.373300, lng:-84.955600 },
+  { name:"Blu Dot Farm & Vineyard",           address:"11399 Boyne City Rd, Charlevoix, MI",        region:"Tip of the Mitt",       lat:45.332157, lng:-85.210007 },
+  { name:"Maple Moon Winery",                 address:"4454 Atkins Rd, Petoskey, MI",               region:"Tip of the Mitt",       lat:45.340500, lng:-84.960500 },
+  { name:"Mackinaw Trail Winery",             address:"3423 US-131, Petoskey, MI",                  region:"Tip of the Mitt",       lat:45.336000, lng:-84.964000 },
+  { name:"Pond Hill Farm", address:"2501 Lake Shore Dr, Harbor Springs, MI",     region:"Tip of the Mitt",       lat:45.430500, lng:-84.962000 },
+  { name:"Crooked Vine Vineyard & Winery",    address:"8370 Lakeview Rd, Alanson, MI",              region:"Tip of the Mitt",       lat:45.429022, lng:-84.775621 },
+  { name:"Vanderbilt Vines",                  address:"302 W Thumb Lake Rd, Vanderbilt, MI",        region:"Tip of the Mitt",       lat:45.187277, lng:-84.687726 },
+  { name:"Castle Farms",                      address:"5052 M-66, Charlevoix, MI",                  region:"Tip of the Mitt",       lat:45.280515, lng:-85.230204 },
+  { name:"Spare Key Winery",                  address:"06872 Upper Bay Shore Rd, Charlevoix, MI",   region:"Tip of the Mitt",       lat:45.349148, lng:-85.254436 },
+  { name:"Boyne Valley Vineyards",            address:"2325 US-131, Boyne Falls, MI",               region:"Tip of the Mitt",       lat:45.282398, lng:-84.943543 },
+  { name:"Petoskey Farms Vineyard & Winery",  address:"3720 Atkins Rd, Petoskey, MI",               region:"Tip of the Mitt",       lat:45.360073, lng:-84.896283 },
+  { name:"Walloon Lake Winery",               address:"3149 Intertown Rd, Petoskey, MI",            region:"Tip of the Mitt",       lat:45.341346, lng:-85.007174 },
+  { name:"Cellar 1914",                       address:"5833 Shooks Rd, Central Lake, MI",            region:"Tip of the Mitt",       lat:45.119066, lng:-85.305491 },
+  { name:"Seasons of the North Winery",       address:"9090 M-68, Indian River, MI",                region:"Tip of the Mitt",       lat:45.406087, lng:-84.670849 },
+  { name:"The Cellars at Royal Farms",        address:"10445 US-31, Ellsworth, MI",                 region:"Tip of the Mitt",       lat:45.185298, lng:-85.345424 },
+  { name:"FarmHouse Vineyards",               address:"8450 Channel Rd, Petoskey, MI",              region:"Tip of the Mitt",       lat:45.411131, lng:-84.796262 },
+];
+
+// ── REGION CONFIG ───────────────────────────────────────────────
+const REGION = {
+  "Old Mission Peninsula": { color:"#2c5f2e", fill:"#4a8c4d", badge:"badge-om",  bar:"popup-bar-om"  },
+  "Leelanau Peninsula":    { color:"#7a2735", fill:"#a63d4d", badge:"badge-lee", bar:"popup-bar-lee" },
+  "Tip of the Mitt":       { color:"#1e3a5f", fill:"#2d5490", badge:"badge-tip", bar:"popup-bar-tip" },
+};
+
+function mapsUrl(addr) {
+  return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(addr);
+}
+
+// ── INIT MAP ────────────────────────────────────────────────────
+const map = L.map("map", { zoomControl: true }).setView([45.08, -85.28], 9);
+
+L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>',
+  subdomains: "abcd",
+  maxZoom: 19
+}).addTo(map);
+
+// ── BUILD MARKERS + CARDS ────────────────────────────────────────
+const list    = document.getElementById("winery-list");
+const countEl = document.getElementById("count");
+let activeCard   = null;
+let activeMarker = null;
+
+const markerData = wineries.map((w, i) => {
+  const rc = REGION[w.region];
+
+  // Leaflet circle marker
+  const marker = L.circleMarker([w.lat, w.lng], {
+    radius:      8,
+    color:       rc.color,
+    fillColor:   rc.fill,
+    fillOpacity: 0.88,
+    weight:      2,
+    opacity:     1,
+  });
+
+  const popupHtml = `
+    <div class="popup-region-bar ${rc.bar}"></div>
+    <div class="popup-inner">
+      <div class="popup-name">${w.name}</div>
+      <div class="popup-region-label">${w.region}</div>
+      <div class="popup-address">${w.address}</div>
+      <a class="popup-directions" href="${mapsUrl(w.name + " " + w.address)}" target="_blank">↗ Get Directions</a>
+    </div>`;
+
+  marker.bindPopup(popupHtml, { maxWidth: 260 });
+  marker.addTo(map);
+
+  // Card
+  const card = document.createElement("div");
+  card.className = "card";
+  card.dataset.region = w.region;
+  card.dataset.index  = i;
+  card.innerHTML = `
+    <div class="card-name">${w.name}</div>
+    <span class="card-badge ${rc.badge}">${w.region}</span>
+    <div class="card-address">${w.address}</div>
+    <a class="card-directions" href="${mapsUrl(w.name + " " + w.address)}" target="_blank">↗ Get Directions</a>`;
+  list.appendChild(card);
+
+  // Card click → fly to marker
+  card.addEventListener("click", (e) => {
+    if (e.target.classList.contains("card-directions")) return;
+    setActive(i);
+    map.flyTo([w.lat, w.lng], 13, { duration: 0.8 });
+    marker.openPopup();
+  });
+
+  // Marker click → highlight card
+  marker.on("click", () => {
+    setActive(i);
+    card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  });
+
+  return { marker, card, winery: w };
+});
+
+function setActive(i) {
+  if (activeCard !== null) {
+    markerData[activeCard].card.classList.remove("active");
+    markerData[activeCard].marker.setStyle({ radius: 8, weight: 2 });
+  }
+  activeCard = i;
+  markerData[i].card.classList.add("active");
+  markerData[i].marker.setStyle({ radius: 11, weight: 3 });
+}
+
+// ── FILTERS ─────────────────────────────────────────────────────
+let currentFilter = "all";
+
+document.querySelectorAll(".filter-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentFilter = btn.dataset.region;
+    applyFilter();
+  });
+});
+
+function applyFilter() {
+  let visible = 0;
+  markerData.forEach(({ marker, card, winery }) => {
+    const show = currentFilter === "all" || winery.region === currentFilter;
+    if (show) {
+      card.classList.remove("hidden");
+      if (!map.hasLayer(marker)) marker.addTo(map);
+      visible++;
+    } else {
+      card.classList.add("hidden");
+      if (map.hasLayer(marker)) map.removeLayer(marker);
+    }
+  });
+
+  const label = currentFilter === "all" ? "all 44" : visible.toString();
+  const region = currentFilter === "all" ? "wineries" : currentFilter + " wineries";
+  countEl.textContent = `Showing ${label} ${region}`;
+
+  // Reset active if hidden
+  if (activeCard !== null && markerData[activeCard].card.classList.contains("hidden")) {
+    markerData[activeCard].card.classList.remove("active");
+    markerData[activeCard].marker.setStyle({ radius: 8, weight: 2 });
+    activeCard = null;
+  }
+}
+</script>
+
+<!-- Services CTA Banner -->
+<div style="background:#2c5f2e; padding:48px 24px; text-align:center; font-family:'Lato',sans-serif;">
+  <p style="color:#c4922a; font-size:13px; letter-spacing:2px; text-transform:uppercase; margin-bottom:10px;">Want it all planned for you?</p>
+  <h2 style="color:#ffffff; font-family:'Playfair Display',serif; font-size:28px; font-weight:600; margin-bottom:12px;">Take the guesswork out of your Northern Michigan trip</h2>
+  <p style="color:#d4cfc6; font-size:15px; max-width:560px; margin:0 auto 32px; line-height:1.7;">You've found the wineries — now let a local handle the rest. From quick recommendations to full trip planning, I'll make sure your day runs perfectly.</p>
+  <div style="display:flex; flex-wrap:wrap; justify-content:center; gap:14px;">
+    <a href="https://www.northernmichigantravelguide.tips/store/p/ask-a-local" style="background:#c4922a; color:#ffffff; text-decoration:none; padding:14px 28px; border-radius:4px; font-size:14px; font-weight:600; letter-spacing:0.5px;">Ask A Local — Quick Answers</a>
+    <a href="https://www.northernmichigantravelguide.tips/store" style="background:transparent; color:#ffffff; text-decoration:none; padding:14px 28px; border-radius:4px; font-size:14px; font-weight:600; letter-spacing:0.5px; border:2px solid #ffffff;">Browse Ready-Made Itineraries</a>
+    <a href="https://www.northernmichigantravelguide.tips/services" style="background:transparent; color:#c4922a; text-decoration:none; padding:14px 28px; border-radius:4px; font-size:14px; font-weight:600; letter-spacing:0.5px; border:2px solid #c4922a;">Full Trip Planning & Concierge</a>
+  </div>
+</div>
+
+</body>
+</html>
